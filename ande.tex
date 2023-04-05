@@ -1,0 +1,208 @@
+\documentclass{article}
+\usepackage[table]{xcolor}
+\usepackage[letterpaper,margin=1in]{geometry}
+\usepackage{ifthen}
+\usepackage{lmodern}
+
+\setlength{\parindent}{0in}
+\setlength{\parskip}{.15in}
+\raggedright
+
+\title{ANDE Format Specification Version 0.2.0 Preliminary}
+
+\author{Stephen D. Holland and others}
+\date{April 4th, 2023}
+
+\newenvironment{AndeClass}[3]{
+  % Parameters:
+  % class name, version, superclass
+  
+  % Class columns:
+  % entry name, hdf5 type, value type, requirement, description
+  \begin{tabular}{|c c p{.4in} p{.5in} p{2.9in}|}
+    \multicolumn{5}{l}{{\Large \bf Class}{\Large \ttfamily \fontseries{b} #1} version #2 \ifthenelse{\equal{#3}{}}{}{; derives from #3}} \\
+    \hline
+    Name & HDF5 Type & Value Type & Require & Description \\
+    \hline
+}{
+  \hline
+  \end{tabular}
+}
+\newenvironment{AndeMetadata}[3]{
+  % Parameters:
+  % class or class tag name, version, "tag" if a class tag, otherwise ""
+  
+  % Class columns:
+  % entry name, value type, requirement, description
+  \begin{tabular}{|c p{.4in} p{.5in} p{2.9in}|}
+    \multicolumn{4}{l}{{\Large \bf Metadata for class #3}{\Large \ttfamily \fontseries{b} #1} version #2 }\\
+    \hline
+    Name & Value Type & Require & Description \\
+    \hline
+}{
+  \hline
+  \end{tabular}
+}
+
+
+\newcommand{\AndeElementLine}[5]{{\tt #1} & #2 & #3 & #4 & #5 \\}
+
+\newcommand{\AndeClassColSpanLine}[1]{\hline \multicolumn{5}{|l|}{#1} \\ \hline}
+
+\newcommand{\AndeClassesLine}[1]{
+  \AndeElementLine{ande\_classes}{Attribute}{String array}{Must contain}{
+    Names of derived class and all ancestor classes; at minimum #1.
+  }
+}
+
+\newcommand{\AndeClassTagsLine}[1]{
+  \AndeElementLine{ande\_class-tags}{Attribute}{String array}{May contain}{
+    Tagged characteristics, usually specified in metadata\ifthenelse{\equal{#1}{}}{}{; at minimum #1}.
+  }
+}
+
+\newcommand{\AndeMetadataLine}[4]{{\tt #1} & #2 & #3 & #4 \\}
+
+\newcommand{\AndeMetadataColSpanLine}[1]{\hline \multicolumn{4}{|l|}{#1} \\ \hline}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction}
+
+\section{Concepts}
+
+The basic concept of the ANDE format is the ``recording''. Conceptually, the recording is some unit of acquired and/or processed data that you are storing. Recordings can be large or small, representing as little as a single number (or even be entirely empty), or multiple grouped datasets, gigabytes or even terabytes in size.
+
+Most NDE data is naturally stored in an array. For example, a digitally-sampled ultrasonic A-scan representing pressure as a function of time, is naturally represented by the stored sample values in an array where the index maps to time. However, just storing the sample values is not sufficient, as you don't know the initial time, the time step, or how to interpret the sample values.
+
+By storing the NDE data in ANDE format, you can include metadata such as the time step, coordinate axis specifications, and units. You can also group multiple arrays by name within the same file, and even (if desired) have a tree of recordings, like files within folders on your computer.
+
+More sophisticated acquisition can result in higher-dimensional data, such as C-scans, full matrix capture ultrasound, and X-ray computed tomography. All of these modalities generate multi-dimensional arrays that are stored in ANDE format as easily as the single A-Scan.
+
+The ANDE format was also designed to be readily extensible to support additional data types and representations including surface data from CAD models, kinematic models for robotic systems, and 3D geometry more generally.
+
+The specification so far focuses on very basic classes. However, it includes class tag functionality that is intended to support grouped metadata for common applications, such as transducer specification and similar. The presence of a particular class tag will indicate to the reader that metadata conforming to a corresponding specification is present. In addition, it is anticipated that new classes will be defined in the future to correspond to specific NDE measurement scenarios for specific NDE modalities.
+
+\section{Data Model and HDF5 Representation}
+
+The overall structure of ANDE data is a hierarchical tree of groups containing
+recordings. Each recording could be an ande\_group, representing a deeper level of the tree, or an ande\_array. Other such classes are also possible, including both subclasses of ande\_group and ande\_array, as well as entirely new data structures, which only derive from ande\_recording.
+
+The basic unit is the ande\_recording, which contains primarily name and metadata. The ande\_group enables the tree structure. The ande\_array contains array-structured data. Since ande\_array and ande\_group both inherit from ande\_recording, they also can contain metadata.
+
+ANDE metadata is attached to ande\_recording. It consists of multiple named entries. The entry names are generally prefixed by the name of the class or class tag which specifies the entry. Metadata can have string, double-precision floating point, signed and unsigned 64-bit integer, and boolean data types.
+
+The root of the data structure is always a group with a blank name. This group is refered to with the path ``/''. Recordings can be identified via slash-delimited paths, similar to the path portions of web URLs, or POSIX file paths. For example, ``/ultrasound\_test/Cscan'' would refer to the ``Cscan'' recording within the ``ultrasound\_test'' group within the root group.
+
+The primary storage layer is HDF5, and in the HDF5 representation, the various classes are represented as HDF5 groups containing specific HDF5 attributes, HDF5 datasets, and/or HDF5 subgroups. Note that the ANDE paths mentioned above are different from HDF5 paths; for example the ANDE path ``/ultrasound\_test/Cscan'' would have an HDF5 path of ``/ande\_group-subgroups/ultrasound\_test/ande\_group-subgroups/Cscan'' (per the ande\_group specification below).
+
+HDF5 datasets are used for storing the array data, and array dimensions. Within the HDF5 context, array data is stored as a unidimensional array, along with a companion integer dimension dataset (dimlenC or dimlenF) that indicates the lengths of the axes, and whether the data is stored C-style (row major with the last index changing most rapidly), or Fortran-style (column major with the first index changing most rapidly). Data layouts other than contiguous C-style or contiguous Fortran-style are not supported.
+
+Metadata is supported as named HDF5 attributes attached to an HDF5 subgroup.
+Boolean metadata is stored as an H5T\_ENUM within an H5T\_NATIVE\_UINT8, with two possible values: FALSE (0) and TRUE (1).
+
+Strings are stored as variable length null terminated H5T\_STRING with character type H5T\_C\_S1 and UTF8 character set.
+
+Non-HDF5 representations of ANDE data are also possible, such as JSON serializations of the tree structure. Such forms would usually be used to provide dual compatibility files between ANDE and some other format. No such forms have yet been formally defined.
+
+\subsection{ande\_recording}
+The ande\_recording class is the basic element of the ANDE data model. It defines a unit of information that has a name and that can have arbitrary metadata attached.
+  \newcommand{\AndeRecordingElements}{
+    \AndeElementLine{ande\_recording-label}{Attribute}{String}{Must contain}{
+      The label of this recording within its parent group.
+    }
+    \AndeElementLine{ande\_recording-version}{Attribute}{String}{Must contain}{
+      A version of the ande\_recording specification that this recording is compatible with.
+    }
+    \AndeElementLine{ande\_recording-metadata}{Group}{Group}{Must contain}{
+      Named metadata entries as hdf5 attributes. Attribute values can be strings, floating point, or signed or unsigned  integers, or booleans. Booleans are represented  as an hdf5  enumeration with two values, 0 and 1. Attribute names beginning with `ande\_’  are reserved for standardized attributes.
+    }
+  }
+
+\begin{AndeClass}{ande\_recording}{0.2.0}{}
+  \AndeClassesLine{ande\_recording}
+  \AndeClassTagsLine{}
+  \AndeRecordingElements  
+\end{AndeClass}
+
+\subsection{ande\_group}
+The ande\_group class is an nde\_recording  that allows nested recordings (composite design pattern). Entries within an ande\_group are generally indexed by name, not by an ordering within the group. If ordering is important, name the entries so that alphanumeric sorting will result in the correct order. The underlying HDF5 library can be configured to track ordering, but this is not currently used, and other storage layers may not.
+
+\newcommand{\AndeGroupElements}{
+    \AndeElementLine{ande\_group-version}{Attribute}{String}{Must contain}{
+      A version of the ande\_group specification that this recording is compatible with.
+    }
+    \AndeElementLine{ande\_group-subgroups}{Group}{Group}{Must contain}{
+      Zero or more hdf5 subgroups each containing an ande\_recording, named according to their labels.
+    }
+  }
+
+\begin{AndeClass}{ande\_group}{0.2.0}{ande\_recording}
+  \AndeClassesLine{ande\_recording and ande\_group}
+  \AndeClassTagsLine{}
+  \AndeRecordingElements
+  \AndeGroupElements % render the group elements
+\end{AndeClass}
+
+\subsection{ande\_array}
+The ande\_array class is an ande\_recording that stores one or more multidimensional arrays. In general, it will store exactly one multidimensional array with corresponding metadata defining the coordinate axes, step sizes, and units. In almost all cases, multiple arrays should be stored as separate ande\_array instances within a containing ande\_group.
+
+\newcommand{\AndeArrayElements}{
+    \AndeElementLine{ande\_array-version}{Attribute}{String}{Must contain}{
+      A version of the ande\_array specification that this recording is compatible with.
+    }
+    \AndeElementLine{ande\_array-numarrays}{Attribute}{Integer}{Must contain}{
+      The integer attribute representing the number of multi dimensional arrays stored within this ande\_array. This is 1 in almost all cases, because usually when multiple data arrays are needed they should each have their own ande\_array.
+    }
+    \AndeClassColSpanLine{For each multi dimensional array, indexed i starting from zero:}
+    \AndeElementLine{ande\_array-name-<i>}{Attribute}{String}{Must contain}{The name of the array corresponding to index i.  Indices start from zero. If no other naming is required, the single array within the ande\_array should be named ``array-0''. The index must not contain leading zeros.
+    }
+    \AndeElementLine{ande\_array-array-<i>}{Dataset}{Array}{Must contain}{An HDF5 dataset containing the data for the array corresponding to index i.  Indices start from zero. The data should be contiguous and stored in either C order (row major) or Fortran order (column major).
+      {\tt ande\_array-array-<i>} should have an HDF5 string attribute named ande\_array-nativetype  containing a string representation of the appropriate hdf5  native type for the array data. Specifically, ``H5T\_NATIVE\_FLOAT'' for 32-bit floating point, ``H5T\_NATIVE\_DOUBLE'' for 64-bit floating point, ``H5T\_NATIVE\_INTx'' for an x-bit signed integer, or ``H5T\_NATIVE\_UINTx'' for an x-bit unsigned integer. 
+    }
+    \AndeElementLine{ande\_array-dimlenC-<i>}{Dataset}{Integer array}{Must contain either this or dimlenF}{Specifies that the array is stored in C order and contains an HDF5 dataset containing the array dimensions for the array corresponding to index i.}
+    \AndeElementLine{ande\_array-dimlenF-<i>}{Dataset}{Integer array}{Must contain either this or dimlenC}{Specifies that the array is stored in Fortran order and contains an HDF5 dataset containing the array dimensions for the array corresponding to index i.}    
+  }
+
+\begin{AndeClass}{ande\_array}{0.2.0}{ande\_recording}
+  \AndeClassesLine{ande\_recording and ande\_array}
+  \AndeClassTagsLine{}
+  \AndeRecordingElements
+  \AndeArrayElements % render the array elements
+\end{AndeClass}
+
+The ande\_array class also specifies metadata representing axis information for the different axes of the array. Even if the ande\_array contains multiple multi dimensional arrays, only one set of axis information is provided, and this information implicitly relates to the 1st (index zero) array. This metadata is stored in the ande\_recording-metadata subgroup defined above. 
+
+\begin{AndeMetadata}{ande\_array}{0.2.0}{}
+  \AndeMetadataLine{ande\_array-ampl\_coord}{String}{Should contain}{
+    A string representing the name of the coordinate axis corresponding to the numbers stored in the array. If missing, then the coordinate is interpreted as a default coordinate of ``Voltage''.
+  }
+  \AndeMetadataLine{ande\_array-ampl\_units}{String}{Should contain}{
+    A string representing the units of the coordinate axis corresponding to the numbers stored in the array.  If missing, then the units are interpreted as a default unit of ``Volts''. 
+  }
+  \AndeMetadataColSpanLine{For each axis j of the multi dimensional array, the following metadata entries should be defined:}
+  \AndeMetadataLine{ande\_array-axis<j>\_coord}{String}{Should contain}{
+    A string representing the name of the coordinate axis. If missing, then the coordinate is interpreted as a default coordinate of ``Time''.
+  }
+  \AndeMetadataLine{ande\_array-axis<j>\_inival}{Double}{Should contain}{
+    A floating point number representing the coordinate of the first entry along this axis in physical units. If missing, the value is interpreted as 0.0.
+  }
+  \AndeMetadataLine{ande\_array-axis<j>\_inival-units}{String}{Should contain}{
+    A string representing the units for {\tt ande\_array-axis<j>\_inival}. This and {\tt ande\_array-axis<j>\_step-units} must be specified (or not specified) as a matching pair. If missing, the units are interpreted as ``seconds''.
+  }
+  \AndeMetadataLine{ande\_array-axis<j>\_step}{Double}{Should contain}{
+    A floating point number representing the step size along this axis in physical units. If missing, the value is interpreted as 1.0.
+  }
+  \AndeMetadataLine{ande\_array-axis<j>\_step-units}{String}{Should contain}{
+    A string representing the units for {\tt ande\_array-axis<j>\_step}. This and {\tt ande\_array-axis<j>\_inival-units} must be specified (or not specified) as a matching pair. If missing, the units are interpreted as ``seconds''.
+  }
+\end{AndeMetadata}
+
+\section Discussion Topics
+\begin{itemize}
+\item scaling/probe attenuation
+\item ordering within a group
+\end{itemize}
+\end{document}
