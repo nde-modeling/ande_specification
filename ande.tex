@@ -180,29 +180,37 @@ The ande\_array class also specifies metadata representing axis information for 
     A string representing the name of the coordinate axis corresponding to the numbers stored in the array. If missing, then the coordinate is interpreted as a default coordinate of ``Voltage''.
   }
   \AndeMetadataLine{ande\_array-ampl\_units}{String}{Should contain}{
-    A string representing the units of the coordinate axis corresponding to the numbers stored in the array.  If missing, then the units are interpreted as a default unit of ``Volts''. 
+    A string representing the units of the coordinate axis corresponding to the numbers stored in the array, once multiplied by the scaling factor and added to the offset. If missing, then the units are interpreted as a default unit of ``Volts''. 
+  }
+  \AndeMetadataLine{ande\_array-ampl\_offset}{Double}{Should contain}{
+    An offset to be added post-scaling to the numbers stored in the array. If missing, the offset is interpreted as 0.0.
+  }
+  \AndeMetadataLine{ande\_array-ampl\_scale}{Double}{Should contain}{
+    A scale to be multiplied pre-offset to the numbers stored in the array. If missing, the scale is interpreted as 1.0.
   }
   \AndeMetadataColSpanLine{For each axis j of the multi dimensional array, the following metadata entries should be defined:}
   \AndeMetadataLine{ande\_array-axis<j>\_coord}{String}{Should contain}{
     A string representing the name of the coordinate axis. If missing, then the coordinate is interpreted as a default coordinate of ``Time''.
   }
-  \AndeMetadataLine{ande\_array-axis<j>\_inival}{Double}{Should contain}{
+  \AndeMetadataLine{ande\_array-axis<j>\_offset}{Double}{Should contain}{
     A floating point number representing the coordinate of the first entry along this axis in physical units. If missing, the value is interpreted as 0.0.
   }
-  \AndeMetadataLine{ande\_array-axis<j>\_inival-units}{String}{Should contain}{
-    A string representing the units for {\tt ande\_array-axis<j>\_inival}. This and {\tt ande\_array-axis<j>\_step-units} must be specified (or not specified) as a matching pair. If missing, the units are interpreted as ``seconds''.
+  \AndeMetadataLine{ande\_array-axis<j>\_offset-units}{String}{Should contain}{
+    A string representing the units for {\tt ande\_array-axis<j>\_offset}. This and {\tt ande\_array-axis<j>\_scale-units} must be specified (or not specified) as a matching pair. If missing, the units are interpreted as ``seconds''.
   }
-  \AndeMetadataLine{ande\_array-axis<j>\_step}{Double}{Should contain}{
+  \AndeMetadataLine{ande\_array-axis<j>\_scale}{Double}{Should contain}{
     A floating point number representing the step size along this axis in physical units. If missing, the value is interpreted as 1.0.
   }
-  \AndeMetadataLine{ande\_array-axis<j>\_step-units}{String}{Should contain}{
-    A string representing the units for {\tt ande\_array-axis<j>\_step}. This and {\tt ande\_array-axis<j>\_inival-units} must be specified (or not specified) as a matching pair. If missing, the units are interpreted as ``seconds''.
+  \AndeMetadataLine{ande\_array-axis<j>\_scale-units}{String}{Should contain}{
+    A string representing the units for {\tt ande\_array-axis<j>\_scale}. This and {\tt ande\_array-axis<j>\_offset-units} must be specified (or not specified) as a matching pair. If missing, the units are interpreted as ``seconds''.
   }
 \end{AndeMetadata}
 
-\section Discussion Topics
+\section{Discussion Topics}
 \begin{itemize}
-\item scaling/probe attenuation
-\item ordering within a group
+\item scaling/probe attenuation -- add offset and scale metadata entries
+\item ordering within a group -- agreed that order is not significant, except perhaps alphanumeric order
+\item storage of C-scan data; relationship of raw data cube, extracted C-scans, and time gates/thresholds -- separate storage of data cube, configured C-scans, and pre-extracted C-scans
+\item encoding kinematic model(s) along with measured data to facilitate CAD model projection. -- store coordinate frames and parametric transforms, tagged to specify at least one specific path that connects specimen CAD model and sensor ray. Multiple paths are possible and multiple data sources for post-processing refinement. Use Gaussian mixtures as a general form of uncertainty representation to facilitate post-processing, for example by Monte Carlo methods
 \end{itemize}
 \end{document}
