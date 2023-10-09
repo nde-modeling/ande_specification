@@ -13,10 +13,10 @@
 \setlength{\parskip}{.15in}
 \raggedright
 
-\title{ANDE Format Specification Version 0.3.0-groupedarray Preliminary}
+\title{ANDE Format Specification Version 0.3.1-groupedarray Preliminary}
 
 \author{Stephen D. Holland and others}
-\date{August 9, 2023}
+\date{October 9th, 2023}
 
 \newenvironment{AndeClass}[3]{
   % Parameters:
@@ -88,7 +88,7 @@ The basic concept of the ANDE format is the ``recording''. Conceptually, the rec
 
 Most NDE data is naturally stored in an array. For example, a digitally-sampled ultrasonic A-scan representing pressure as a function of time, is naturally represented by the stored sample values in an array where the index maps to time. However, just storing the sample values is not sufficient, as you don't know the initial time, the time step, or how to interpret the sample values.
 
-In many cases, such arrays are naturally grouped. For example, you could be storing raw ultrasonic A-scans along with a C-scan image. The A-scans are probably indexed $(t,x,y)$ whereas the C-scan is probably indexed $(x,y)$. We want to store these together so that the intrinsic commonality is preserved. Thus we introduce the idea of ``grouped arrays''. These arrays share common trailing axes ($x$, and $y$ in this case) while allowing array-specific leading axes (such as time $t$ in this case). 
+In many cases, such arrays are naturally grouped. For example, you could be storing raw ultrasonic A-scans along with a C-scan image. The A-scans are probably indexed $(t,x,y)$ or $(y,x,t)$ whereas the C-scan is probably indexed $(x,y)$ or $(y,x)$. We want to store these together so that the intrinsic commonality is preserved. Thus we introduce the idea of ``grouped arrays''. These arrays share common axes ($x$, and $y$ in this case) while allowing array-specific leading axes (such as time $t$ in this case). 
 
 By storing the NDE data in ANDE format, you can include metadata such as the time step, coordinate axis specifications, and units. You can also group multiple arrays by name within the same file, and even (if desired) have a tree of recordings, like files within folders on your computer.
 
@@ -105,13 +105,13 @@ recordings. Each recording could be an ande\_group, representing a deeper level 
 
 The basic unit is the ande\_recording, which contains primarily name and metadata. The ande\_group enables the tree structure. The ande\_array contains grouped array-structured data. Since ande\_array and ande\_group both inherit from ande\_recording, they also can contain metadata.
 
-ANDE metadata is attached to ande\_recording. It consists of multiple named entries. The entry names are generally prefixed by the name of the class or class tag which specifies the entry. Metadata can have string, double-precision floating point, signed and unsigned 64-bit integer, and boolean data types.
+ANDE metadata is attached to ande\_recording. It consists of multiple named entries. The entry names are generally prefixed by the name of the class or class tag which specifies the entry. Metadata can have string, double-precision floating point, signed and unsigned 64-bit integer, boolean, and structured JSON data types.
 
 The root of the data structure is always a group with a blank name. This group is refered to with the path ``/''. Recordings can be identified via slash-delimited paths, similar to the path portions of web URLs, or POSIX file paths. For example, ``/ultrasound\_tests/specimen1'' would refer to the ``specimen1'' recording within the ``ultrasound\_tests'' group within the root group.
 
 The primary storage layer is HDF5, and in the HDF5 representation, the various classes are represented as HDF5 groups containing specific HDF5 attributes, HDF5 datasets, and/or HDF5 subgroups. Note that the ANDE paths mentioned above are different from HDF5 paths; for example the ANDE path ``/ultrasound\_tests/specimen1'' would have an HDF5 path of ``/ande\_group-subgroups/ultrasound\_tests/ande\_group-subgroups/specimen1'' (per the ande\_group specification below).
 
-HDF5 datasets are used for storing the array data and array dimensions. Within the HDF5 context, array data is stored as a multidimensional array, but with the order of the indices reversed from the normal interpretation discussed in this specification. The reversal is because HDF5 only supports C-style array indexing whereas in this specification we define indexing as Fortran style where the first index changes most rapidly (Fortran style was chosen for compatibility with image storage where images are indexed $(x,y)$ with $x$ changing most rapidly). 
+HDF5 datasets are used for storing the array data and array dimensions. Within the HDF5 context, array data is stored as a multidimensional array. Array indexing can be interpreted as C style (fastest changing index on the right) or Fortran style (fastest changing index on the left). Either way, HDF5 only supports C style indexing so indexes must be C ordered when reading or writing data with HDF5. In addition, indexes are numbered with the common dimensions first (common dimensions are on the left C style, but on the right Fortran style), so index numbering is left to right for C style indexing but right to left for Fortran style indexing.  
 
 An older version of this specification wrote array data as a unidimensional array, along with a companion integer dimension dataset (dimlenC or dimlenF) that indicated the lengths of the axes, and whether the data was stored C-style (row major with the last index changing most rapidly), or Fortran-style (column major with the first index changing most rapidly). Data layouts other than contiguous C-style or contiguous Fortran-style were not supported. Writing data in this form is deprecated, but it is recommended to still support reading these older files.  
 
@@ -119,6 +119,10 @@ Metadata is supported as named HDF5 attributes attached to HDF5 subgroups.
 Boolean metadata is stored as an H5T\_ENUM within an H5T\_NATIVE\_UINT8, with two possible values: FALSE (0) and TRUE (1).
 
 Strings are stored as variable length null terminated H5T\_STRING with character type H5T\_C\_S1 and UTF8 character set.
+
+Integers are stored in a type convertible to H5T\_NATIVE\_UINT64 or H5T\_NATIVE\_INT64 according to whether they are unsigned or signed. Floating point numbers are stored in a type convertible to H5T\_NATIVE\_DOUBLE.
+
+Structured metadata is stored as a UTF8 encoded JSON string. In general the specification for the structured metadata should provide a schema. 
 
 Non-HDF5 representations of ANDE data are also possible, such as JSON serializations of the tree structure. Such forms would usually be used to provide dual compatibility files between ANDE and some other format. No such forms have yet been formally defined.
 
@@ -132,7 +136,7 @@ The ande\_recording class is the basic element of the ANDE data model. It define
       A version of the ande\_recording specification that this recording is compatible with.
     }
     \AndeElementLine{ande\_recording-metadata}{Group}{Group}{Must contain}{
-      Named metadata entries as hdf5 attributes. Attribute values can be strings, floating point, or signed or unsigned  integers, or booleans. Booleans are represented  as an hdf5  enumeration with two values, 0 and 1. Attribute names beginning with `ande\_’  are reserved for standardized attributes.
+      Named metadata entries as hdf5 attributes. Attribute values can be UTF8 strings, floating point, or signed or unsigned 64 bit integers, structured JSON, or booleans. Booleans are represented  as an hdf5  enumeration with two values, 0 and 1. Attribute names beginning with `ande\_’  are reserved for standardized attributes. Structured JSON is string metadata indicated by an attribute on the attribute named ``ande\_json'' with the boolean value True.
     }
    
   }
@@ -142,7 +146,7 @@ The ande\_recording class is the basic element of the ANDE data model. It define
     } 
   }
   
-\begin{AndeClass}{ande\_recording}{0.3.0-groupedarray}{}
+\begin{AndeClass}{ande\_recording}{0.3.1-groupedarray}{}
   \AndeClassesLine{ande\_recording}
   \AndeClassTagsLine{}
   \AndeRecordingElements
@@ -161,7 +165,7 @@ The ande\_group class is an nde\_recording  that allows nested recordings (compo
     }
   }
 
-\begin{AndeClass}{ande\_group}{0.3.0-groupedarray}{ande\_recording}
+\begin{AndeClass}{ande\_group}{0.3.1-groupedarray}{ande\_recording}
   \AndeClassesLine{ande\_recording and ande\_group}
   \AndeClassTagsLine{}
   \AndeRecordingElements
@@ -181,14 +185,14 @@ The ande\_array class is an ande\_recording that stores one or more grouped mult
     \AndeClassColSpanLine{For each multi dimensional array, indexed i starting from zero:}
     \AndeElementLine{ande\_array-name-<i>}{Attribute}{String}{Must contain}{The name of the array corresponding to index i.  Indices start from zero. If no other naming is required, the single array within the ande\_array should be named ``array-0''. The index must not contain leading zeros.
     }
-    \AndeElementLine{ande\_array-array-<i>}{Dataset}{Array}{Must contain}{An HDF5 dataset containing the data for the array corresponding to index i.  Indices start from zero. The data should be contiguous and stored as a multidimensional HDF5 array with indices given in reverse order (recall HDF5 stores in C order whereas this specification defines data stored in Fortran order). 
+    \AndeElementLine{ande\_array-array-<i>}{Dataset}{Array}{Must contain}{An HDF5 dataset containing the data for the array corresponding to index i.  Indices start from zero. The data should be contiguous and stored as a multidimensional HDF5 array with indices given in C order.
       {\tt ande\_array-array-<i>} should have an HDF5 string attribute named ande\_array-nativetype  containing a string representation of the appropriate hdf5  native type for the array data. Specifically, ``H5T\_NATIVE\_FLOAT'' for 32-bit floating point, ``H5T\_NATIVE\_DOUBLE'' for 64-bit floating point, ``H5T\_NATIVE\_INTx'' for an x-bit signed integer, or ``H5T\_NATIVE\_UINTx'' for an x-bit unsigned integer. 
     }
     %\AndeElementLine{ande\_array-dimlenC-<i>}{Dataset}{Integer array}{Must contain either this or dimlenF}{Specifies that the array is stored in C order and contains an HDF5 dataset containing the array dimensions for the array corresponding to index i.}
     %\AndeElementLine{ande\_array-dimlenF-<i>}{Dataset}{Integer array}{Must contain either this or dimlenC}{Specifies that the array is stored in Fortran order and contains an HDF5 dataset containing the array dimensions for the array corresponding to index i.}    
   }
 
-\begin{AndeClass}{ande\_array}{0.3.0-groupedarray}{ande\_recording}
+\begin{AndeClass}{ande\_array}{0.3.1-groupedarray}{ande\_recording}
   \AndeClassesLine{ande\_recording and ande\_array}
   \AndeClassTagsLine{}
   \AndeRecordingElements
@@ -196,9 +200,9 @@ The ande\_array class is an ande\_recording that stores one or more grouped mult
   \AndeArrayElements % render the array elements
 \end{AndeClass}
 
-The ande\_array class also specifies metadata representing axis information for the different axes of the array. The axis information for common (trailing) axes is given in the main recording metadata {\tt ande\_recording-metadata}. The axis information specific to a particular array is given in recording subcomponent metadata {\tt ande\_recording-sub<i>-metadata}. Common (trailing axis) metadata is stored numbered from 0 representing the first common axis. The actual corresponding axis index will vary between arrays according to the number of array-specific axes. 
+The ande\_array class also specifies metadata representing axis information for the different axes of the array. The axis information for common  axes is given in the main recording metadata {\tt ande\_recording-metadata}. The axis information specific to a particular array is given in recording subcomponent metadata {\tt ande\_recording-sub<i>-metadata}. Common metadata is stored numbered from 0 representing the first common axis. 
 
-\begin{AndeMetadata}{ande\_array}{0.3.0-groupedarray}{}
+\begin{AndeMetadata}{ande\_array}{0.3.1-groupedarray}{}
   \AndeMetadataColSpanLine{For each multidimensional subarray i, the following recording subcomponent metadata entries should be defined:}
   \AndeMetadataLine{ande\_array-ampl\_coord}{String}{Should contain}{
     A string representing the name of the coordinate axis corresponding to the numbers stored in the array. If missing, then the coordinate is interpreted as a default coordinate of ``Voltage''.
@@ -232,7 +236,7 @@ The ande\_array class also specifies metadata representing axis information for 
 
 \section{Discussion Topics}
 \begin{itemize}
-\item consider reversing axis ordering from (x,y) to (y,x) and calling it 'C-order' instead of Fortran order to make axis numbering simpler (array-specific axes added to the end instead of inserted at the beginning). 
+
 \item ordering within a group -- agreed that order is not significant, except perhaps alphanumeric order
 \item encoding kinematic model(s) along with measured data to facilitate CAD model projection. -- store coordinate frames and parametric transforms, tagged to specify at least one specific path that connects specimen CAD model and sensor ray. Multiple paths are possible and multiple data sources for post-processing refinement. Use Gaussian mixtures as a general form of uncertainty representation to facilitate post-processing, for example by Monte Carlo methods
 \end{itemize}
